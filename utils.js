@@ -1,6 +1,6 @@
 // Helper function to create a client_assertion JWT for private_key_jwt authentication
 const njwt = require('njwt');
-const { v4: uuidv4 } = require('uuid')
+const crypto = require('crypto');
 
 function createClientAssertionJwt(xaaClientConfig, audience) {
   if (!xaaClientConfig.privateKey) {
@@ -22,7 +22,7 @@ function createClientAssertionJwt(xaaClientConfig, audience) {
   var now = new Date().getTime()
   var exp = token.body.iat * 1000 + (3 * 60 * 1000)
   token.setExpiration(exp)
-  token.setJti(uuidv4())
+  token.setJti(crypto.randomUUID())
   token = token.compact()
   console.log("Token used for client authentication")
   console.log(token)
