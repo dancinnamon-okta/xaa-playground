@@ -1,0 +1,31 @@
+{
+  "name": "xaa-playground",
+  "version": "1.0.0",
+  "description": "A playground application for exploring the Identity Assertion JWT Authorization Grant (XAA) protocol",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [
+    "oauth",
+    "xaa",
+    "identity-assertion",
+    "jwt",
+    "authorization-grant"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@okta/okta-auth-js": "^7.11.0",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.9",
+    "express": "^4.18.2",
+    "express-session": "^1.18.1",
+    "njwt": "^2.0.1",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

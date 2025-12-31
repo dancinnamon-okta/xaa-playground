@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error - XAA Playground</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">XAA Playground</div>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">Specification</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero error-hero">
+      <h1>⚠️ Error</h1>
+      <p class="subtitle"><%= message %></p>
+    </section>
+
+    <section class="error-details">
+      <h2>Error Details</h2>
+      <div class="code-block">
+        <pre><code><%= error %></code></pre>
+      </div>
+      <div class="error-actions">
+        <a href="/" class="btn btn-primary">Return Home</a>
+        <a href="/login" class="btn btn-secondary">Try Again</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>XAA Playground - A learning tool for the Identity Assertion JWT Authorization Grant protocol</p>
+    <p>
+      Based on <a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">draft-ietf-oauth-identity-assertion-authz-grant</a>
+    </p>
+  </footer>
+</body>
+</html>

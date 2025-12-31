@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - XAA Playground</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">XAA Playground</div>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">Specification</a></li>
+        <li><a href="/dashboard" class="active">Dashboard</a></li>
+        <li><span class="user-label">👤 <%= user.name %></span></li>
+        <li><a href="/logout" class="nav-btn logout-btn">Logout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+
+    <div class="dashboard-columns">
+      <!-- Left Column: Token Information -->
+      <div class="dashboard-column left-column">
+        <section class="raw-tokens">
+          <h2>Raw Tokens</h2>
+          <p>The complete encoded tokens (click to expand):</p>
+          
+          <details class="token-expandable">
+            <summary>Initial Login ID Token (JWT)</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= tokenDetails.rawIdToken %></code></pre>
+            </div>
+          </details>
+          
+          <details class="token-expandable">
+            <summary>Initial Login Access Token (JWT)</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= tokenDetails.rawAccessToken %></code></pre>
+            </div>
+          </details>
+          
+          <% if (tokens.refreshToken) { %>
+          <details class="token-expandable">
+            <summary>Initial Login Refresh Token</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= tokens.refreshToken %></code></pre>
+            </div>
+          </details>
+          <% } %>
+
+          <% if (xaaResult && xaaResult.idJag) { %>
+          <details class="token-expandable xaa-token">
+            <summary>🔄 XAA: Identity Assertion JWT Authorization Grant (ID-JAG)</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= xaaResult.idJag %></code></pre>
+            </div>
+          </details>
+          <% } %>
+
+          <% if (xaaResult && xaaResult.success && xaaResult.accessToken) { %>
+          <details class="token-expandable xaa-token">
+            <summary>🔄 XAA: Resource Access Token</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= xaaResult.accessToken %></code></pre>
+            </div>
+          </details>
+          <% } %>
+        </section>
+
+        <section class="token-details">
+          <h2>Token Details</h2>
+          <p>Decoded token claims (click to expand):</p>
+          
+          <details class="token-expandable">
+            <summary>Initial Login ID Token Details</summary>
+            <div class="claims-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Claim</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% if (tokenDetails.idTokenPayload) { %>
+                    <% Object.keys(tokenDetails.idTokenPayload).forEach(function(key) { %>
+                    <tr>
+                      <td><code><%= key %></code></td>
+                      <td>
+                        <% if (key === 'iat' || key === 'exp' || key === 'auth_time') { %>
+                          <%= tokenDetails.idTokenPayload[key] %> (<%= new Date(tokenDetails.idTokenPayload[key] * 1000).toISOString() %>)
+                        <% } else if (typeof tokenDetails.idTokenPayload[key] === 'object') { %>
+                          <code><%= JSON.stringify(tokenDetails.idTokenPayload[key]) %></code>
+                        <% } else { %>
+                          <%= tokenDetails.idTokenPayload[key] %>
+                        <% } %>
+                      </td>
+                    </tr>
+                    <% }); %>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <details class="token-expandable">
+            <summary>Initial Login Access Token Details</summary>
+            <div class="claims-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Claim</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% if (tokenDetails.accessTokenPayload) { %>
+                    <% Object.keys(tokenDetails.accessTokenPayload).forEach(function(key) { %>
+                    <tr>
+                      <td><code><%= key %></code></td>
+                      <td>
+                        <% if (key === 'iat' || key === 'exp' || key === 'auth_time') { %>
+                          <%= tokenDetails.accessTokenPayload[key] %> (<%= new Date(tokenDetails.accessTokenPayload[key] * 1000).toISOString() %>)
+                        <% } else if (typeof tokenDetails.accessTokenPayload[key] === 'object') { %>
+                          <code><%= JSON.stringify(tokenDetails.accessTokenPayload[key]) %></code>
+                        <% } else { %>
+                          <%= tokenDetails.accessTokenPayload[key] %>
+                        <% } %>
+                      </td>
+                    </tr>
+                    <% }); %>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <% if (xaaResult && xaaResult.idJagPayload) { %>
+          <details class="token-expandable xaa-token" open>
+            <summary>🔄 XAA: ID-JAG Token Details</summary>
+            <div class="claims-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Claim</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% Object.keys(xaaResult.idJagPayload).forEach(function(key) { %>
+                  <tr>
+                    <td><code><%= key %></code></td>
+                    <td>
+                      <% if (key === 'iat' || key === 'exp' || key === 'auth_time') { %>
+                        <%= xaaResult.idJagPayload[key] %> (<%= new Date(xaaResult.idJagPayload[key] * 1000).toISOString() %>)
+                      <% } else if (typeof xaaResult.idJagPayload[key] === 'object') { %>
+                        <code><%= JSON.stringify(xaaResult.idJagPayload[key]) %></code>
+                      <% } else { %>
+                        <%= xaaResult.idJagPayload[key] %>
+                      <% } %>
+                    </td>
+                  </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <% } %>
+
+          <% if (xaaResult && xaaResult.success && xaaResult.accessTokenPayload) { %>
+          <details class="token-expandable xaa-token" open>
+            <summary>🔄 XAA: Resource Access Token Details</summary>
+            <div class="claims-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Claim</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% Object.keys(xaaResult.accessTokenPayload).forEach(function(key) { %>
+                  <tr>
+                    <td><code><%= key %></code></td>
+                    <td>
+                      <% if (key === 'iat' || key === 'exp' || key === 'auth_time') { %>
+                        <%= xaaResult.accessTokenPayload[key] %> (<%= new Date(xaaResult.accessTokenPayload[key] * 1000).toISOString() %>)
+                      <% } else if (typeof xaaResult.accessTokenPayload[key] === 'object') { %>
+                        <code><%= JSON.stringify(xaaResult.accessTokenPayload[key]) %></code>
+                      <% } else { %>
+                        <%= xaaResult.accessTokenPayload[key] %>
+                      <% } %>
+                    </td>
+                  </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <% } %>
+        </section>
+      </div>
+
+      <!-- Right Column: XAA Token Exchange -->
+      <div class="dashboard-column right-column">
+        <section class="xaa-exchange-section">
+          <h2>🔄 XAA Token Exchange</h2>
+          <p>Perform an Identity Assertion JWT Authorization Grant (ID-JAG) token exchange to obtain an access token for a third-party resource.</p>
+          
+          <div class="xaa-info-box">
+            <h4>How it works:</h4>
+            <ol>
+              <li><strong>Token Exchange:</strong> Your ID token is exchanged at the IdP for an ID-JAG targeted at the destination audience.</li>
+              <li><strong>JWT Bearer Grant:</strong> The ID-JAG is presented to the Resource Authorization Server to obtain an access token.</li>
+            </ol>
+          </div>
+
+          <form action="/xaa-exchange" method="POST" class="xaa-form">
+            <div class="form-group">
+              <label for="audience">Destination Audience (Required)</label>
+              <input 
+                type="url" 
+                id="audience" 
+                name="audience" 
+                placeholder="https://resource-server.example.com" 
+                required
+                class="form-input"
+              >
+              <span class="form-hint">The issuer URL of the Resource Authorization Server</span>
+            </div>
+
+            <div class="form-group">
+              <label for="scopes">Requested Scopes (Required)</label>
+              <input 
+                type="text" 
+                id="scopes" 
+                name="scopes" 
+                placeholder="read write" 
+                class="form-input"
+              >
+              <span class="form-hint">Space-separated list of scopes to request</span>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                🔄 Perform Token Exchange
+              </button>
+            </div>
+          </form>
+
+          <% if (xaaResult) { %>
+          <div class="xaa-result <%= xaaResult.success ? 'success' : (xaaResult.partialSuccess ? 'partial' : 'error') %>">
+            <div class="result-header">
+              <% if (xaaResult.success) { %>
+                <h4>✅ Token Exchange Successful</h4>
+              <% } else if (xaaResult.partialSuccess) { %>
+                <h4>⚠️ Partial Success - ID-JAG Obtained</h4>
+              <% } else { %>
+                <h4>❌ Token Exchange Failed</h4>
+              <% } %>
+              <form action="/clear-xaa" method="POST" style="display: inline;">
+                <button type="submit" class="btn btn-small btn-secondary">Clear</button>
+              </form>
+            </div>
+            
+            <div class="result-details">
+              <p><strong>Requested Audience:</strong> <%= xaaResult.requestedAudience %></p>
+              <% if (xaaResult.requestedScopes) { %>
+                <p><strong>Requested Scopes:</strong> <%= xaaResult.requestedScopes %></p>
+              <% } %>
+              <% if (xaaResult.requestedResource) { %>
+                <p><strong>Requested Resource:</strong> <%= xaaResult.requestedResource %></p>
+              <% } %>
+              <% if (xaaResult.error) { %>
+                <p class="error-message"><strong>Error:</strong> <%= xaaResult.error %></p>
+              <% } %>
+              <% if (xaaResult.success) { %>
+                <p><strong>Token Type:</strong> <%= xaaResult.tokenType %></p>
+                <p><strong>Expires In:</strong> <%= xaaResult.expiresIn %> seconds</p>
+                <% if (xaaResult.scope) { %>
+                  <p><strong>Granted Scopes:</strong> <%= xaaResult.scope %></p>
+                <% } %>
+              <% } %>
+              <p class="timestamp"><strong>Timestamp:</strong> <%= xaaResult.timestamp %></p>
+            </div>
+          </div>
+          <% } %>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

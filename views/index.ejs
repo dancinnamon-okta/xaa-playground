@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAA Playground - Identity Assertion JWT Authorization Grant</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">XAA Playground</div>
+      <ul class="nav-links">
+        <li><a href="/" class="active">Home</a></li>
+        <li><a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">Specification</a></li>
+        <% if (typeof isLoggedIn !== 'undefined' && isLoggedIn) { %>
+          <li><a href="/dashboard">Dashboard</a></li>
+          <li><a href="/logout" class="nav-btn logout-btn">Logout</a></li>
+        <% } else { %>
+          <li><a href="/login" class="nav-btn login-btn">Login with Okta</a></li>
+        <% } %>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Identity Assertion JWT Authorization Grant</h1>
+      <p class="subtitle">Explore the XAA Protocol</p>
+      <p class="tagline">Enabling secure cross-application access through enterprise identity providers</p>
+    </section>
+
+    <section class="intro">
+      <h2>What is the XAA Protocol?</h2>
+      <p>
+        The <strong>Identity Assertion JWT Authorization Grant</strong> (ID-JAG), also known as the <strong>XAA (Cross App Access)</strong> protocol, 
+        is an emerging IETF standard that enables applications to obtain access tokens for third-party APIs by coordinating 
+        through a common enterprise identity provider (IdP).
+      </p>
+      <p>
+        This specification combines <a href="https://www.rfc-editor.org/rfc/rfc8693" target="_blank">OAuth 2.0 Token Exchange (RFC 8693)</a> 
+        and <a href="https://www.rfc-editor.org/rfc/rfc7523" target="_blank">JWT Profile for OAuth 2.0 Authorization Grants (RFC 7523)</a> 
+        to provide a seamless, user-friendly way for enterprise applications to access each other's APIs without requiring 
+        additional interactive OAuth flows.
+      </p>
+    </section>
+
+    <section class="problem">
+      <h2>The Problem It Solves</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>🔐 Traditional OAuth Flows</h3>
+          <p>
+            When one application needs to access a user's data at another application, it typically starts an interactive 
+            OAuth flow. This requires user interaction and creates a direct app-to-app connection that is not visible to 
+            the enterprise IdP.
+          </p>
+        </div>
+        <div class="card">
+          <h3>🏢 Enterprise Control</h3>
+          <p>
+            Enterprises want centralized control over which applications can access each other's APIs on behalf of users. 
+            The XAA protocol enables the same IdP that manages single sign-on to also broker API access between applications.
+          </p>
+        </div>
+        <div class="card">
+          <h3>👤 User Experience</h3>
+          <p>
+            Multiple OAuth consent screens create friction. XAA enables seamless cross-application access without 
+            additional user interaction, while maintaining proper authorization through the enterprise IdP.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="how-it-works">
+      <h2>How It Works</h2>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h4>User SSO</h4>
+            <p>User authenticates with the IdP. The client obtains an identity assertion (ID Token or SAML assertion).</p>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h4>Token Exchange</h4>
+            <p>Client uses the identity assertion to request an Identity Assertion JWT Authorization Grant (ID-JAG) from the IdP for the target resource.</p>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h4>Exchange ID-JAG</h4>
+            <p>Client exchanges the ID-JAG for an access token at the Resource Authorization Server's token endpoint.</p>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h4>API Access</h4>
+            <p>Client makes API requests to the Resource Server using the obtained access token.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="key-concepts">
+      <h2>Key Concepts</h2>
+      <div class="concepts-grid">
+        <div class="concept">
+          <h4>Identity Assertion JWT Authorization Grant (ID-JAG)</h4>
+          <p>
+            A JWT issued by the IdP that grants a client delegated access to a resource in another trust domain 
+            on behalf of a user. It uses the media type <code>oauth-id-jag+jwt</code>.
+          </p>
+        </div>
+        <div class="concept">
+          <h4>Token Exchange</h4>
+          <p>
+            The client uses RFC 8693 Token Exchange to request an ID-JAG from the IdP, providing the user's 
+            identity assertion, the target audience, and requested scopes.
+          </p>
+        </div>
+        <div class="concept">
+          <h4>JWT Bearer Grant</h4>
+          <p>
+            The ID-JAG is presented to the Resource Authorization Server using the RFC 7523 JWT Bearer 
+            assertion grant type to obtain an access token.
+          </p>
+        </div>
+        <div class="concept">
+          <h4>Trust Relationships</h4>
+          <p>
+            Both the Client and Resource Authorization Server must have established trust relationships 
+            with the common IdP for SSO and ID-JAG issuance.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="use-cases">
+      <h2>Use Cases</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>🏗️ Enterprise SaaS Integration</h3>
+          <p>
+            Enable seamless API access between enterprise SaaS applications (e.g., a wiki app accessing 
+            a chat app's API) without requiring users to complete multiple OAuth consent flows.
+          </p>
+        </div>
+        <div class="card">
+          <h3>📧 Email & Calendaring</h3>
+          <p>
+            Email clients can access third-party calendaring APIs using the user's existing identity 
+            assertion, streamlining the user experience in native applications.
+          </p>
+        </div>
+        <div class="card">
+          <h3>🤖 LLM Agents & AI Tools</h3>
+          <p>
+            AI agents can access enterprise tools and APIs on behalf of users, with all access controlled 
+            and auditable through the enterprise IdP.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="id-jag-structure">
+      <h2>ID-JAG Structure</h2>
+      <p>An Identity Assertion JWT Authorization Grant contains the following claims:</p>
+      <div class="code-block">
+        <pre><code>{
+  "typ": "oauth-id-jag+jwt"
+}
+.
+{
+  "jti": "9e43f81b64a33f20116179",
+  "iss": "https://acme.idp.example",
+  "sub": "U019488227",
+  "aud": "https://acme.chat.example/",
+  "client_id": "f53f191f9311af35",
+  "exp": 1311281970,
+  "iat": 1311280970,
+  "resource": "https://acme.chat.example/api",
+  "scope": "chat.read chat.history",
+  "auth_time": 1311280970,
+  "amr": ["mfa", "phrh", "hwk", "user"]
+}
+.
+signature</code></pre>
+      </div>
+      <div class="claims-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Claim</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>iss</code></td>
+              <td>The issuer identifier of the IdP Authorization Server</td>
+            </tr>
+            <tr>
+              <td><code>sub</code></td>
+              <td>The subject identifier (user ID) at the Resource Authorization Server</td>
+            </tr>
+            <tr>
+              <td><code>aud</code></td>
+              <td>The issuer identifier of the Resource Authorization Server</td>
+            </tr>
+            <tr>
+              <td><code>client_id</code></td>
+              <td>The identifier of the client acting on behalf of the user</td>
+            </tr>
+            <tr>
+              <td><code>resource</code></td>
+              <td>The Resource Identifier of the Resource Server (optional)</td>
+            </tr>
+            <tr>
+              <td><code>scope</code></td>
+              <td>Space-separated list of requested scopes (optional)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="resources">
+      <h2>Resources</h2>
+      <ul class="resource-list">
+        <li>
+          <a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">
+            IETF Draft Specification
+          </a>
+        </li>
+        <li>
+          <a href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-chaining" target="_blank">
+            OAuth Identity and Authorization Chaining Across Domains
+          </a>
+        </li>
+        <li>
+          <a href="https://www.rfc-editor.org/rfc/rfc8693" target="_blank">
+            RFC 8693 - OAuth 2.0 Token Exchange
+          </a>
+        </li>
+        <li>
+          <a href="https://www.rfc-editor.org/rfc/rfc7523" target="_blank">
+            RFC 7523 - JWT Profile for OAuth 2.0 Authorization Grants
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/oauth-wg/oauth-identity-assertion-authz-grant" target="_blank">
+            GitHub Repository
+          </a>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>XAA Playground - A learning tool for the Identity Assertion JWT Authorization Grant protocol</p>
+    <p>
+      Based on <a href="https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/" target="_blank">draft-ietf-oauth-identity-assertion-authz-grant</a>
+    </p>
+  </footer>
+</body>
+</html>
