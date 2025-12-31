@@ -21,11 +21,15 @@ const oktaConfig = {
 // Load the XAA client private key if configured
 let xaaPrivateKey = null;
 
-if (process.env.XAA_CLIENT_PRIVATE_KEY_FILE) {
+if(process.env.XAA_CLIENT_PRIVATE_KEY_CONTENT) {
+  xaaPrivateKey = process.env.XAA_CLIENT_PRIVATE_KEY_CONTENT
+  console.log('XAA client private key loaded from environment variable successfully.');
+}
+else if (process.env.XAA_CLIENT_PRIVATE_KEY_FILE) {
   try {
     const keyFilePath = path.resolve(process.env.XAA_CLIENT_PRIVATE_KEY_FILE);
     xaaPrivateKey = fs.readFileSync(keyFilePath, 'utf8');
-    console.log('XAA client private key loaded successfully');
+    console.log('XAA client private key loaded from file successfully.');
   } catch (error) {
     console.warn('Warning: Could not load XAA client private key:', error.message);
   }
