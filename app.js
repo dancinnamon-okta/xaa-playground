@@ -5,6 +5,8 @@ const fs = require('fs');
 const session = require('express-session');
 const { OktaAuth } = require('@okta/okta-auth-js');
 const util = require('./utils')
+const redis = require('redis')
+const RedisStore = require('connect-redis')
 
 // Load configuration
 const oktaConfig = {
@@ -61,16 +63,37 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Session middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'xaa-playground-dev-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+if(process.env.REDIS_URL) {
+  const redisClient = redis.createClient({ url: redisURL });
+  redisClient.connect();
+  const redisStore = new RedisStore.RedisStore({client: redisClient})
+
+  app.use(session({
+    store: redisStore,
+    secret: process.env.SESSION_SECRET || 'xaa-playground-dev-secret-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+  }));
+
+}
+else {
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'xaa-playground-dev-secret-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+  }));
+}
+
 
 // Middleware to check authentication
 const isAuthenticated = (req, res, next) => {
