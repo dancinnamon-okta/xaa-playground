@@ -68,7 +68,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Session middleware
 if(process.env.REDIS_URL) {
-  const redisClient = redis.createClient({ url: redisURL });
+  const redisClient = redis.createClient({ url: process.env.REDIS_URL });
   redisClient.connect();
   const redisStore = new RedisStore.RedisStore({client: redisClient})
 
