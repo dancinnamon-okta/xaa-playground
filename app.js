@@ -14,6 +14,7 @@ const oktaConfig = {
   clientId: process.env.OKTA_CLIENT_ID,
   clientSecret: process.env.OKTA_CLIENT_SECRET,
   redirectUri: process.env.OKTA_REDIRECT_URI || `http://localhost:${PORT}/callback`,
+  logoutUri: process.env.OKTA_LOGOUT_URI || `http://localhost:${PORT}`,
   scopes: ['openid', 'profile', 'email', 'offline_access'],
   pkce: true
 };
@@ -248,7 +249,9 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     user: req.session.userInfo,
     tokenDetails: req.session.tokenDetails,
     tokens: req.session.tokens,
-    xaaResult: req.session.xaaResult || null
+    xaaResult: req.session.xaaResult || null,
+    sampleAudience: process.env.SAMPLE_AUDIENCE || '',
+    sampleScope: process.env.SAMPLE_SCOPE || ''
   });
 });
 
@@ -410,7 +413,7 @@ app.get('/logout', async (req, res) => {
     if (idToken && oktaConfig.issuer) {
       const logoutUrl = new URL(`${oktaConfig.issuer}/oauth2/v1/logout`);
       logoutUrl.searchParams.set('id_token_hint', idToken);
-      logoutUrl.searchParams.set('post_logout_redirect_uri', `http://localhost:${PORT}/`);
+      logoutUrl.searchParams.set('post_logout_redirect_uri', oktaConfig.logoutUri);
       res.redirect(logoutUrl.toString());
     } else {
       res.redirect('/');
