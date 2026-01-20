@@ -10,9 +10,27 @@ const RedisStore = require('connect-redis')
 
 // Load configuration
 const PORT = process.env.PORT || 3000;
+let issuer = process.env.OKTA_DOMAIN
+let oauthPathPrefix = process.env.OKTA_DOMAIN
+
+if(!issuer) {
+  console.log("The OKTA_DOMAIN variable has not been properly set.")
+  throw new Error(`The application has not been properly configured. Please ensure all environment variables are set!`);
+}
+
+if(process.env.OKTA_CUSTOM_AUTHZ_SERVER_ID) {
+  console.log("This application hass been configured with a custom authorization server. Using that as the issuer.")
+  issuer = `${issuer}/oauth2/${process.env.OKTA_CUSTOM_AUTHZ_SERVER_ID}`
+  oauthPathPrefix = issuer
+}
+else {
+  oauthPathPrefix = `${oauthPathPrefix}/oauth2`
+}
 
 const oktaConfig = {
-  issuer: process.env.OKTA_ISSUER,
+  issuer: issuer,
+  oauthPathPrefix: oauthPathPrefix,
+  oktaDomain: process.env.OKTA_DOMAIN,
   clientId: process.env.OKTA_CLIENT_ID,
   clientSecret: process.env.OKTA_CLIENT_SECRET,
   redirectUri: process.env.OKTA_REDIRECT_URI || `http://localhost:${PORT}/callback`,
@@ -135,7 +153,7 @@ app.get('/login', async (req, res) => {
     req.session.oauthNonce = tokenParams.nonce;
     
     // Build the authorization URL
-    const authUrl = new URL(`${oktaConfig.issuer}/oauth2/v1/authorize`);
+    const authUrl = new URL(`${oktaConfig.oauthPathPrefix}/v1/authorize`);
     authUrl.searchParams.set('client_id', oktaConfig.clientId);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', oktaConfig.scopes.join(' '));
@@ -176,7 +194,7 @@ app.get('/callback', async (req, res) => {
     }
     
     // Token endpoint URL
-    const tokenUrl = `${oktaConfig.issuer}/oauth2/v1/token`;
+    const tokenUrl = `${oktaConfig.oauthPathPrefix}/v1/token`;
     
     // Exchange code for tokens
     const tokenResponse = await fetch(tokenUrl, {
@@ -274,20 +292,25 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
     }
     
     const idToken = req.session.tokens?.idToken;
-    if (!idToken) {
+    const accessToken = req.session.tokens?.accessToken;
+
+    if (!idToken && !accessToken) {
       throw new Error('No ID token available for exchange');
     }
     
     // Step 1: Token Exchange with IdP to get ID-JAG
     // Per the spec, we exchange our ID token for an Identity Assertion JWT Authorization Grant
-    const tokenExchangeUrl = `${oktaConfig.issuer}/oauth2/v1/token`;
+    //We always want to get the JAG from the org level authz server! Not necessarily the issuer for this application.
+    const tokenExchangeUrl = `${oktaConfig.oktaDomain}/oauth2/v1/token`
     
+    //Note that if the main issuer of the app is org level authz server, we perform this exchange with the id token.
+    //If the main issuer for the app is a custom authz server, then we perform this exchange with the access token.
     const tokenExchangeParams = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
       requested_token_type: 'urn:ietf:params:oauth:token-type:id-jag',
       audience: audience,
-      subject_token: idToken,
-      subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+      subject_token: (oktaConfig.issuer == oktaConfig.oktaDomain ? idToken : accessToken),
+      subject_token_type: (oktaConfig.issuer == oktaConfig.oktaDomain ? 'urn:ietf:params:oauth:token-type:id_token' : 'urn:ietf:params:oauth:token-type:access_token'),
       client_id: xaaClientId,
       scope: scopes.trim()
     });
@@ -296,7 +319,7 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
     const clientAssertion = util.createClientAssertionJwt(xaaClientConfig, tokenExchangeUrl);
     tokenExchangeParams.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
     tokenExchangeParams.set('client_assertion', clientAssertion);
-
+    console.log(tokenExchangeParams.toString())
     const tokenExchangeResponse = await fetch(tokenExchangeUrl, {
       method: 'POST',
       headers: {
@@ -413,7 +436,7 @@ app.get('/logout', async (req, res) => {
     
     // If we have an id_token, redirect to Okta logout
     if (idToken && oktaConfig.issuer) {
-      const logoutUrl = new URL(`${oktaConfig.issuer}/oauth2/v1/logout`);
+      const logoutUrl = new URL(`${oktaConfig.oauthPathPrefix}/v1/logout`);
       logoutUrl.searchParams.set('id_token_hint', idToken);
       logoutUrl.searchParams.set('post_logout_redirect_uri', oktaConfig.logoutUri);
       res.redirect(logoutUrl.toString());
@@ -426,8 +449,4 @@ app.get('/logout', async (req, res) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`XAA Playground is running at http://localhost:${PORT}`);
-  if (!process.env.OKTA_ISSUER || !process.env.OKTA_CLIENT_ID) {
-    console.warn('Warning: OKTA_ISSUER and OKTA_CLIENT_ID environment variables are not set.');
-    console.warn('Please create a .env file with your Okta configuration.');
-  }
 });

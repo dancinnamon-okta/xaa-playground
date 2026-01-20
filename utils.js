@@ -24,8 +24,7 @@ function createClientAssertionJwt(xaaClientConfig, audience) {
   token.setExpiration(exp)
   token.setJti(crypto.randomUUID())
   token = token.compact()
-  console.log("Token used for client authentication")
-  console.log(token)
+
   return token
 }
 
