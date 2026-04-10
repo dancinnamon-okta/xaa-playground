@@ -88,7 +88,8 @@ nav {
 
 /* Main content */
 main {
-  max-width: 1200px;
+  width: 95vw; /* Fluid width to use most of the viewport */
+  max-width: 1600px; /* Cap for ultra-wide displays to maintain readability */
   margin: 0 auto;
   padding: 2rem;
 }
@@ -592,7 +593,7 @@ footer a {
 /* Dashboard two-column layout */
 .dashboard-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr; /* Three equal-width columns */
   gap: 2rem;
   margin-bottom: 3rem;
 }

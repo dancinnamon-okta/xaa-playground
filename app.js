@@ -72,6 +72,11 @@ const oktaAuth = new OktaAuth({
   pkce: oktaConfig.pkce
 });
 
+const approvalConfig = {
+  approvalApiAudience: process.env.APPROVAL_API_AUDIENCE,
+  approvalApiScope: 'submit_approval'
+}
+
 //ExpressJS Init.
 const app = express();
 
@@ -270,6 +275,7 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     tokenDetails: req.session.tokenDetails,
     tokens: req.session.tokens,
     xaaResult: req.session.xaaResult || null,
+    approvalRequest: req.session.approvalRequest || null,
     sampleAudience: process.env.SAMPLE_AUDIENCE || '',
     sampleScope: process.env.SAMPLE_SCOPE || ''
   });
@@ -284,9 +290,6 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
       throw new Error('Destination audience is required');
     }
 
-    // Determine which client to use for XAA exchange
-    const xaaClientId = xaaClientConfig.clientId;
-    
     if (xaaClientConfig.clientId && !xaaPrivateKey) {
       throw new Error('XAA client ID is configured but private key is not available');
     }
@@ -294,78 +297,12 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
     const idToken = req.session.tokens?.idToken;
     const accessToken = req.session.tokens?.accessToken;
 
-    if (!idToken && !accessToken) {
-      throw new Error('No ID token available for exchange');
-    }
+    const { idJag, idJagPayload } = await util.getIdJag(idToken, accessToken, audience, scopes, xaaClientConfig, oktaConfig);
+    console.log("JAG Retrieved Successfully!");
+    console.log(idJag);
     
-    // Step 1: Token Exchange with IdP to get ID-JAG
-    // Per the spec, we exchange our ID token for an Identity Assertion JWT Authorization Grant
-    //We always want to get the JAG from the org level authz server! Not necessarily the issuer for this application.
-    const tokenExchangeUrl = `${oktaConfig.oktaDomain}/oauth2/v1/token`
-    
-    //Note that if the main issuer of the app is org level authz server, we perform this exchange with the id token.
-    //If the main issuer for the app is a custom authz server, then we perform this exchange with the access token.
-    const tokenExchangeParams = new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-      requested_token_type: 'urn:ietf:params:oauth:token-type:id-jag',
-      audience: audience,
-      subject_token: (oktaConfig.issuer == oktaConfig.oktaDomain ? idToken : accessToken),
-      subject_token_type: (oktaConfig.issuer == oktaConfig.oktaDomain ? 'urn:ietf:params:oauth:token-type:id_token' : 'urn:ietf:params:oauth:token-type:access_token'),
-      client_id: xaaClientId,
-      scope: scopes.trim()
-    });
-
-    // Add authentication based on configuration
-    const clientAssertion = util.createClientAssertionJwt(xaaClientConfig, tokenExchangeUrl);
-    tokenExchangeParams.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
-    tokenExchangeParams.set('client_assertion', clientAssertion);
-    console.log(tokenExchangeParams.toString())
-    const tokenExchangeResponse = await fetch(tokenExchangeUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: tokenExchangeParams
-    });
-
-    const tokenExchangeData = await tokenExchangeResponse.json();
-    
-    if (tokenExchangeData.error) {
-      throw new Error(`Token exchange failed: ${tokenExchangeData.error} - ${tokenExchangeData.error_description || ''}`);
-    }
-    
-    // The ID-JAG is returned in the access_token field per RFC 8693
-    const idJag = tokenExchangeData.access_token;
-    const idJagPayload = util.decodeJwtPayload(idJag);
-
-    console.log("JAG Retrieved Successfully!")
-    console.log(idJag)
-    
-    // Step 2: Exchange the ID-JAG for an access token at the Resource Authorization Server
-    // Per the spec, we use the jwt-bearer grant type
-    const resourceTokenUrl = `${audience}/v1/token`;
-    
-    const resourceTokenParams = new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: idJag,
-      client_id: xaaClientId
-    });
-
-    // Add authentication based on configuration
-    const resourceClientAssertion = util.createClientAssertionJwt(xaaClientConfig, resourceTokenUrl);
-    resourceTokenParams.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
-    resourceTokenParams.set('client_assertion', resourceClientAssertion);
-
-    
-    const resourceTokenResponse = await fetch(resourceTokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: resourceTokenParams
-    });
-    
-    const resourceTokenData = await resourceTokenResponse.json();
+    // Step 2: Exchange the ID-JAG for an access token at the Resource Authorization Server via util
+    const resourceTokenData = await util.exchangeJagForAccessToken(idJag, audience, xaaClientConfig);
     
     if (resourceTokenData.error) {
       // Store partial result with ID-JAG even if the second exchange fails
@@ -379,12 +316,13 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
         requestedScopes: scopes,
         timestamp: new Date().toISOString()
       };
+
       await req.session.save();
       return res.redirect('/dashboard');
     }
 
-    const xaaAccessToken = resourceTokenData.access_token;
-    const xaaAccessTokenPayload = util.decodeJwtPayload(xaaAccessToken);
+  const xaaAccessToken = resourceTokenData.access_token;
+  const xaaAccessTokenPayload = util.decodeJwtPayload(xaaAccessToken);
     
     // Store successful XAA exchange result in session
     req.session.xaaResult = {
@@ -418,11 +356,247 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
   }
 });
 
+// Begin Approval route - captures approval request intent from dashboard
+app.post('/begin-approval', isAuthenticated, async (req, res) => {
+  try {
+    const { requestType } = req.body;
+
+    if (!requestType) {
+      throw new Error('Request type is required');
+    }
+
+    const idToken = req.session.tokens?.idToken;
+    const accessToken = req.session.tokens?.accessToken;
+
+    // Load action description mapping
+    let actionDescriptions;
+    try {
+      const descPath = path.join(__dirname, 'actionDescriptions.json');
+      const raw = fs.readFileSync(descPath, 'utf8');
+      actionDescriptions = JSON.parse(raw);
+    } catch (e) {
+      throw new Error('Could not load actionDescriptions.json');
+    }
+
+    const actionDescription = actionDescriptions[requestType];
+
+    // First step: initiate approval via external endpoint
+    const initUrl = process.env.INIT_APPROVAL_URL;
+    if (!initUrl) {
+      throw new Error('INIT_APPROVAL_URL is not configured');
+    }
+
+    
+    console.log("Obtaining JAG for raising an approval request...")
+    const approvalIdJag = await util.getIdJag(idToken, accessToken, approvalConfig.approvalApiAudience, approvalConfig.approvalApiScope, xaaClientConfig, oktaConfig)
+    
+    console.log(approvalIdJag.idJag)
+
+    console.log("JAG Obtrained... Obtaining accesss token.")
+    const approvalAccessToken = await util.exchangeJagForAccessToken(approvalIdJag.idJag, approvalConfig.approvalApiAudience, xaaClientConfig)
+    console.log("Access Token Obtained... making approval request now!")
+
+    console.log(approvalAccessToken)
+
+    const initResp = await fetch(initUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authorization': `Bearer ${approvalAccessToken.access_token}`
+      },
+      body: JSON.stringify({
+        scope: requestType,
+        actionDescription: actionDescription
+      })
+    });
+
+    let initData = await initResp.json();
+
+    // Persist lightweight approval request context in session for UI feedback
+    req.session.approvalRequest = {
+      requestType,
+      state: {
+        success: initData.success,
+        message: initData.message,
+        requestId: initData.requestId,
+        currentStatus: 'PENDING',
+        decision: ''
+      },
+      requestedFor: req.session.userInfo?.email || null,
+      timestamp: new Date().toISOString()
+    };
+
+    req.session.tokens.approvalAccessToken = approvalAccessToken.access_token
+
+    await req.session.save();
+    return res.redirect('/dashboard');
+  } catch (error) {
+    console.error('Begin Approval error:', error);
+    req.session.approvalRequest = {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+    await req.session.save();
+    return res.redirect('/dashboard');
+  }
+});
+
 // Clear XAA result route
 app.post('/clear-xaa', isAuthenticated, async (req, res) => {
   delete req.session.xaaResult;
   await req.session.save();
   res.redirect('/dashboard');
+});
+
+// Clear Elevated Approval state route
+app.post('/clear-elevated', isAuthenticated, async (req, res) => {
+  // Remove approval flow context and any related tokens
+  delete req.session.approvalRequest;
+  if (req.session.tokens) {
+    delete req.session.tokens.approvalAccessToken;
+    delete req.session.tokens.elevatedAccessToken;
+  }
+  await req.session.save();
+  res.redirect('/dashboard');
+});
+
+// Poll for approval status route
+app.post('/poll-request', isAuthenticated, async (req, res) => {
+  try {
+    const pollUrl = process.env.POLL_APPROVAL_URL;
+    if (!pollUrl) {
+      throw new Error('POLL_APPROVAL_URL is not configured');
+    }
+
+    const approvalToken = req.session.tokens?.approvalAccessToken;
+    if (!approvalToken) {
+      throw new Error('Approval access token is missing. Start a new approval first.');
+    }
+
+    const requestId = req.session.approvalRequest?.state?.requestId;
+    if (!requestId) {
+      throw new Error('Approval requestId is missing. Start a new approval first.');
+    }
+
+    const pollResp = await fetch(pollUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authorization': `Bearer ${approvalToken}`
+      },
+      body: JSON.stringify({ requestId: requestId })
+    });
+
+    let pollData = await pollResp.json();
+    
+    if (!pollResp.ok) {
+      const apiErr = pollData?.error || pollData?.message || `HTTP ${pollResp.status}`;
+      throw new Error(`Polling failed: ${apiErr}`);
+    }
+
+    // Persist poll result alongside existing approvalRequest context
+    req.session.approvalRequest.state.currentStatus = pollData.status
+    req.session.approvalRequest.state.decision = pollData.decision
+
+    await req.session.save();
+    return res.redirect('/dashboard');
+
+  } catch (error) {
+    console.error('Poll Request error:', error);
+
+    // Surface error in approvalRequest block for UI feedback
+    req.session.approvalRequest.state.success = false
+    req.session.approvalRequest.state.message = error.message
+    await req.session.save();
+
+    return res.redirect('/dashboard');
+  }
+});
+
+// TODO: Retrieve Elevated Access Token route (stub)
+// This route will retrieve an elevated access token after approval is APPROVED.
+// Implementation will be added later.
+app.post('/get-elevated-access', isAuthenticated, async (req, res) => {
+  try {
+    // Ensure approval flow context exists and has been approved
+    const approvalCtx = req.session.approvalRequest;
+    if (!approvalCtx || !approvalCtx.state || approvalCtx.state.decision !== 'APPROVED') {
+      throw new Error('Approval has not been granted yet. Please complete approval before requesting elevated access.');
+    }
+
+    if (xaaClientConfig.clientId && !xaaPrivateKey) {
+      throw new Error('XAA client ID is configured but private key is not available');
+    }
+
+    // Scopes for elevated access come from the approved request type selection
+    const requestedScope = approvalCtx.requestType;
+    if (!requestedScope) {
+      throw new Error('Missing approved request type for elevated access scope');
+    }
+
+    // Audience is the approval API audience
+    const audience = approvalConfig.approvalApiAudience;
+    if (!audience) {
+      throw new Error('APPROVAL_API_AUDIENCE is not configured');
+    }
+
+    const idToken = req.session.tokens?.idToken;
+    const accessToken = req.session.tokens?.accessToken;
+
+    // Obtain an ID-JAG for the approval API with the approved scope
+    const { idJag, idJagPayload } = await util.getIdJag(
+      idToken,
+      accessToken,
+      audience,
+      requestedScope,
+      xaaClientConfig,
+      oktaConfig
+    );
+
+    // Exchange the ID-JAG for an elevated access token at the same audience
+    const elevatedTokenData = await util.exchangeJagForAccessToken(idJag, audience, xaaClientConfig);
+
+    if (elevatedTokenData.error) {
+      // Persist error details inside approval context for UI/debugging
+      req.session.approvalRequest.elevatedAccess = {
+        success: false,
+        error: `Elevated token exchange failed: ${elevatedTokenData.error} - ${elevatedTokenData.error_description || ''}`,
+        idJag,
+        idJagPayload,
+        requestedAudience: audience,
+        requestedScopes: requestedScope,
+        timestamp: new Date().toISOString()
+      };
+
+      await req.session.save();
+      return res.redirect('/dashboard');
+    }
+
+    const elevatedAccessToken = elevatedTokenData.access_token;
+    const elevatedAccessTokenPayload = util.decodeJwtPayload(elevatedAccessToken);
+
+    // Store the elevated token in session for potential subsequent API calls/UI
+    req.session.tokens.elevatedAccessToken = elevatedAccessToken;
+    req.session.approvalRequest.elevatedAccess = {
+      success: true,
+      idJag,
+      idJagPayload,
+      accessToken: elevatedAccessToken,
+      accessTokenPayload: elevatedAccessTokenPayload,
+      tokenType: elevatedTokenData.token_type,
+      expiresIn: elevatedTokenData.expires_in,
+      scope: elevatedTokenData.scope,
+      requestedAudience: audience,
+      requestedScopes: requestedScope,
+      timestamp: new Date().toISOString()
+    };
+
+    await req.session.save();
+    return res.redirect('/dashboard');
+  } catch (error) {
+    console.error('Get Elevated Access (stub) error:', error);
+    return res.redirect('/dashboard');
+  }
 });
 
 // Logout route

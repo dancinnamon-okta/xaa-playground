@@ -69,6 +69,15 @@
             </div>
           </details>
           <% } %>
+
+          <% if (approvalRequest && approvalRequest.elevatedAccess && approvalRequest.elevatedAccess.accessToken) { %>
+          <details class="token-expandable xaa-token">
+            <summary>🆙 Elevated Access Token</summary>
+            <div class="code-block">
+              <pre><code class="token-raw"><%= approvalRequest.elevatedAccess.accessToken %></code></pre>
+            </div>
+          </details>
+          <% } %>
         </section>
 
         <section class="token-details">
@@ -202,6 +211,38 @@
             </div>
           </details>
           <% } %>
+
+          <% if (approvalRequest && approvalRequest.elevatedAccess && approvalRequest.elevatedAccess.accessTokenPayload) { %>
+          <details class="token-expandable xaa-token" open>
+            <summary>🆙 Elevated Access Token Details</summary>
+            <div class="claims-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Claim</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% Object.keys(approvalRequest.elevatedAccess.accessTokenPayload).forEach(function(key) { %>
+                  <tr>
+                    <td><code><%= key %></code></td>
+                    <td>
+                      <% if (key === 'iat' || key === 'exp' || key === 'auth_time') { %>
+                        <%= approvalRequest.elevatedAccess.accessTokenPayload[key] %> (<%= new Date(approvalRequest.elevatedAccess.accessTokenPayload[key] * 1000).toISOString() %>)
+                      <% } else if (typeof approvalRequest.elevatedAccess.accessTokenPayload[key] === 'object') { %>
+                        <code><%= JSON.stringify(approvalRequest.elevatedAccess.accessTokenPayload[key]) %></code>
+                      <% } else { %>
+                        <%= approvalRequest.elevatedAccess.accessTokenPayload[key] %>
+                      <% } %>
+                    </td>
+                  </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <% } %>
         </section>
       </div>
 
@@ -289,6 +330,88 @@
               <% } %>
               <p class="timestamp"><strong>Timestamp:</strong> <%= xaaResult.timestamp %></p>
             </div>
+          </div>
+          <% } %>
+        </section>
+      </div>
+
+      <!-- Right Column 2: Request Human Approved Access -->
+      <div class="dashboard-column right-column">
+        <section class="xaa-exchange-section">
+          <h2>🧑‍⚖️ Request Human Approved Access</h2>
+          <p>Submit a request that requires human approval for elevated access.</p>
+
+          <form class="xaa-form" action="/begin-approval" method="POST">
+            <div class="form-group">
+              <label for="approved-access-request">Select Request Type</label>
+              <select id="approved-access-request" name="requestType" class="form-input" required>
+                <option value="transfer_money">Transfer Money</option>
+                <option value="update_mailing_address">Update Mailing Address</option>
+                <option value="process_promotion">Process my promotion</option>
+              </select>
+              <span class="form-hint">Choose the action that needs approval</span>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Request Approved Access</button>
+            </div>
+          </form>
+
+          <% if (approvalRequest) { %>
+          <div class="xaa-result <%= approvalRequest.error ? 'error' : 'success' %>">
+            <div class="result-header">
+              <% if (approvalRequest.error) { %>
+                <h4>❌ Approval Request Failed</h4>
+              <% } else { %>
+                <h4>✅ Approval Request Started</h4>
+              <% } %>
+              <form action="/clear-elevated" method="POST" style="display: inline;">
+                <button type="submit" class="btn btn-small btn-secondary">Clear</button>
+              </form>
+            </div>
+            <div class="result-details">
+              <% if (!approvalRequest.error) { %>
+                <p><strong>Request Type:</strong> <%= approvalRequest.requestType %></p>
+                <% if (approvalRequest.requestedFor) { %>
+                  <p><strong>Requested For:</strong> <%= approvalRequest.requestedFor %></p>
+                <% } %>
+                <% if (approvalRequest.state) { %>
+                  <div class="nested-block">
+                    <p><strong>Init Approval:</strong></p>
+                    <ul>
+                      <% if (typeof approvalRequest.state.success !== 'undefined') { %>
+                        <li><strong>Success:</strong> <%= approvalRequest.state.success %></li>
+                      <% } %>
+                      <% if (approvalRequest.state.message) { %>
+                        <li><strong>Message:</strong> <%= approvalRequest.state.message %></li>
+                      <% } %>
+                      <% if (approvalRequest.state.requestId) { %>
+                        <li><strong>Request ID:</strong> <%= approvalRequest.state.requestId %></li>
+                      <% } %>
+                      <% if (approvalRequest.state.currentStatus) { %>
+                        <li><strong>Current Status:</strong> <%= approvalRequest.state.currentStatus %></li>
+                      <% } %>
+                      <% if (typeof approvalRequest.state.decision !== 'undefined' && approvalRequest.state.decision !== '') { %>
+                        <li><strong>Decision:</strong> <%= approvalRequest.state.decision %></li>
+                      <% } %>
+                    </ul>
+                  </div>
+                <% } %>
+                <form action="/poll-request" method="POST" class="inline-form">
+                  <button type="submit" class="btn btn-small btn-secondary">Poll for request approval</button>
+                </form>
+              <% } else { %>
+                <p class="error-message"><strong>Error:</strong> <%= approvalRequest.error %></p>
+              <% } %>
+              <p class="timestamp"><strong>Timestamp:</strong> <%= approvalRequest.timestamp %></p>
+            </div>
+          </div>
+          <% } %>
+          <% if (approvalRequest && approvalRequest.state && approvalRequest.state.decision === 'APPROVED') { %>
+          <div class="form-actions">
+            <form action="/get-elevated-access" method="POST" class="inline-form">
+              <button type="submit" class="btn btn-primary">Retrieve Elevated Access Token</button>
+            </form>
           </div>
           <% } %>
         </section>
