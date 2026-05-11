@@ -17,6 +17,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@okta/okta-auth-js": "^7.11.0",
     "connect-redis": "^9.0.0",
     "dotenv": "^16.4.7",

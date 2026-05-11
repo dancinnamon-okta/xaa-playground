@@ -260,7 +260,7 @@
             </ol>
           </div>
 
-          <form action="/xaa-exchange" method="POST" class="xaa-form">
+          <form id="xaa-form" class="xaa-form">
             <div class="form-group">
               <label for="audience">Destination Audience (Required)</label>
               <input 
@@ -289,8 +289,11 @@
             </div>
 
             <div class="form-actions">
-              <button type="submit" class="btn btn-primary">
-                🔄 Perform Token Exchange
+              <button type="submit" formaction="/xaa-jag" formmethod="POST" class="btn btn-primary" style="margin-bottom: 10px;">
+                🔄 Step 1: Obtain ID-JAG
+              </button>
+              <button type="submit" formaction="/xaa-at" formmethod="POST" class="btn btn-primary" <%= (!xaaResult || !xaaResult.idJag) ? 'disabled' : '' %>>
+                🔄 Step 2: Exchange for Access Token
               </button>
             </div>
           </form>
@@ -329,6 +332,90 @@
                 <% } %>
               <% } %>
               <p class="timestamp"><strong>Timestamp:</strong> <%= xaaResult.timestamp %></p>
+            </div>
+          </div>
+          <% } %>
+        </section>
+
+        <!-- MCP Server Connection -->
+        <section class="xaa-exchange-section">
+          <h2>🔌 MCP Server Connection</h2>
+          <p>Connect to a Model Context Protocol (MCP) server using your XAA resource access token to discover available tools.</p>
+
+          <div class="xaa-info-box">
+            <h4>How it works:</h4>
+            <ol>
+              <li><strong>Provide Endpoint:</strong> Enter the URL of an MCP server that supports HTTP transport.</li>
+              <li><strong>Connect:</strong> The app connects using your XAA resource access token for authorization.</li>
+              <li><strong>List Tools:</strong> Available tools from the MCP server are retrieved and displayed.</li>
+            </ol>
+          </div>
+
+          <form class="xaa-form" action="/mcp-connect" method="POST">
+            <div class="form-group">
+              <label for="mcp-endpoint">MCP Server Endpoint (Required)</label>
+              <input 
+                type="url" 
+                id="mcp-endpoint" 
+                name="mcpEndpoint" 
+                placeholder="https://mcp-server.example.com/mcp" 
+                value="<%= mcpResult?.requestedEndpoint || '' %>"
+                required
+                class="form-input"
+                <%= (!xaaResult || !xaaResult.success || !xaaResult.accessToken) ? 'disabled' : '' %>
+              >
+              <span class="form-hint">The URL of the MCP server HTTP endpoint</span>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" <%= (!xaaResult || !xaaResult.success || !xaaResult.accessToken) ? 'disabled' : '' %>>
+                🔌 Connect & List Tools
+              </button>
+            </div>
+
+            <% if (!xaaResult || !xaaResult.success || !xaaResult.accessToken) { %>
+            <p class="form-hint" style="color: #f39c12; margin-top: 10px;">
+              ⚠️ You need to complete the XAA Token Exchange first to obtain a resource access token.
+            </p>
+            <% } %>
+          </form>
+
+          <% if (mcpResult) { %>
+          <div class="xaa-result <%= mcpResult.success ? 'success' : 'error' %>">
+            <div class="result-header">
+              <% if (mcpResult.success) { %>
+                <h4>✅ MCP Connection Successful</h4>
+              <% } else { %>
+                <h4>❌ MCP Connection Failed</h4>
+              <% } %>
+              <form action="/clear-mcp" method="POST" style="display: inline;">
+                <button type="submit" class="btn btn-small btn-secondary">Clear</button>
+              </form>
+            </div>
+            
+            <div class="result-details">
+              <p><strong>MCP Endpoint:</strong> <%= mcpResult.requestedEndpoint %></p>
+              <% if (mcpResult.error) { %>
+                <p class="error-message"><strong>Error:</strong> <%= mcpResult.error %></p>
+              <% } %>
+              <% if (mcpResult.success && mcpResult.tools) { %>
+                <p><strong>Tools Found:</strong> <%= mcpResult.tools.length %></p>
+                <% if (mcpResult.tools.length > 0) { %>
+                <div class="nested-block">
+                  <ul class="mcp-tools-list">
+                    <% mcpResult.tools.forEach(function(tool) { %>
+                    <li>
+                      <strong><%= tool.name %></strong>
+                      <% if (tool.description) { %>
+                        <br><span class="tool-description"><%= tool.description %></span>
+                      <% } %>
+                    </li>
+                    <% }); %>
+                  </ul>
+                </div>
+                <% } %>
+              <% } %>
+              <p class="timestamp"><strong>Timestamp:</strong> <%= mcpResult.timestamp %></p>
             </div>
           </div>
           <% } %>

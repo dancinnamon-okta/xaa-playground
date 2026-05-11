@@ -7,6 +7,8 @@ const { OktaAuth } = require('@okta/okta-auth-js');
 const util = require('./utils')
 const redis = require('redis')
 const RedisStore = require('connect-redis')
+const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
+const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 
 // Load configuration
 const PORT = process.env.PORT || 3000;
@@ -276,13 +278,14 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
     tokens: req.session.tokens,
     xaaResult: req.session.xaaResult || null,
     approvalRequest: req.session.approvalRequest || null,
+    mcpResult: req.session.mcpResult || null,
     sampleAudience: process.env.SAMPLE_AUDIENCE || '',
     sampleScope: process.env.SAMPLE_SCOPE || ''
   });
 });
 
-// XAA Token Exchange route - performs the Identity Assertion JWT Authorization Grant flow
-app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
+// XAA JAG route - Step 1: Exchange ID token for an ID-JAG
+app.post('/xaa-jag', isAuthenticated, async (req, res) => {
   try {
     const { audience, scopes } = req.body;
     
@@ -301,11 +304,52 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
     console.log("JAG Retrieved Successfully!");
     console.log(idJag);
     
-    // Step 2: Exchange the ID-JAG for an access token at the Resource Authorization Server via util
+    // Store the ID-JAG result in session
+    req.session.xaaResult = {
+      success: true,
+      partialSuccess: false,
+      idJag: idJag,
+      idJagPayload: idJagPayload,
+      requestedAudience: audience,
+      requestedScopes: scopes,
+      timestamp: new Date().toISOString()
+    };
+    
+    await req.session.save();
+    res.redirect('/dashboard');
+    
+  } catch (error) {
+    console.error('XAA JAG error:', error);
+    req.session.xaaResult = {
+      success: false,
+      error: error.message,
+      requestedAudience: req.body.audience,
+      requestedScopes: req.body.scopes,
+      timestamp: new Date().toISOString()
+    };
+    await req.session.save();
+    res.redirect('/dashboard');
+  }
+});
+
+// XAA Access Token route - Step 2: Exchange ID-JAG for an access token
+app.post('/xaa-at', isAuthenticated, async (req, res) => {
+  try {
+    // Get the ID-JAG from the session
+    if (!req.session.xaaResult || !req.session.xaaResult.idJag) {
+      throw new Error('No ID-JAG found in session. Please obtain an ID-JAG first.');
+    }
+    
+    const idJag = req.session.xaaResult.idJag;
+    const audience = req.session.xaaResult.requestedAudience;
+    const scopes = req.session.xaaResult.requestedScopes;
+    const idJagPayload = req.session.xaaResult.idJagPayload;
+    
+    // Exchange the ID-JAG for an access token at the Resource Authorization Server via util
     const resourceTokenData = await util.exchangeJagForAccessToken(idJag, audience, xaaClientConfig);
     
     if (resourceTokenData.error) {
-      // Store partial result with ID-JAG even if the second exchange fails
+      // Keep the ID-JAG but indicate the second exchange failed
       req.session.xaaResult = {
         success: false,
         partialSuccess: true,
@@ -321,8 +365,8 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
       return res.redirect('/dashboard');
     }
 
-  const xaaAccessToken = resourceTokenData.access_token;
-  const xaaAccessTokenPayload = util.decodeJwtPayload(xaaAccessToken);
+    const xaaAccessToken = resourceTokenData.access_token;
+    const xaaAccessTokenPayload = util.decodeJwtPayload(xaaAccessToken);
     
     // Store successful XAA exchange result in session
     req.session.xaaResult = {
@@ -343,12 +387,13 @@ app.post('/xaa-exchange', isAuthenticated, async (req, res) => {
     res.redirect('/dashboard');
     
   } catch (error) {
-    console.error('XAA Exchange error:', error);
+    console.error('XAA Access Token error:', error);
+    // Preserve existing xaaResult data if available
+    const existingResult = req.session.xaaResult || {};
     req.session.xaaResult = {
+      ...existingResult,
       success: false,
       error: error.message,
-      requestedAudience: req.body.audience,
-      requestedScopes: req.body.scopes,
       timestamp: new Date().toISOString()
     };
     await req.session.save();
@@ -456,6 +501,84 @@ app.post('/clear-elevated', isAuthenticated, async (req, res) => {
     delete req.session.tokens.approvalAccessToken;
     delete req.session.tokens.elevatedAccessToken;
   }
+  await req.session.save();
+  res.redirect('/dashboard');
+});
+
+// MCP Connect route - Connect to an MCP server and list available tools
+app.post('/mcp-connect', isAuthenticated, async (req, res) => {
+  try {
+    const { mcpEndpoint } = req.body;
+
+    if (!mcpEndpoint) {
+      throw new Error('MCP endpoint URL is required');
+    }
+
+    // Ensure we have an XAA access token to use for authorization
+    const resourceAccessToken = req.session.xaaResult?.accessToken;
+    if (!resourceAccessToken) {
+      throw new Error('No XAA resource access token available. Please complete the XAA token exchange first.');
+    }
+
+    // Create MCP client
+    const client = new Client({
+      name: 'xaa-playground-mcp-client',
+      version: '1.0.0'
+    });
+
+    console.log("Token to use for MCP connection:", resourceAccessToken);
+    // Create HTTP transport with authorization header
+    const transport = new StreamableHTTPClientTransport(
+      new URL(mcpEndpoint),
+      {
+        requestInit: {
+          headers: {
+            'Authorization': `Bearer ${resourceAccessToken}`
+          }
+        }
+      }
+    );
+
+    // Connect to the MCP server
+    await client.connect(transport);
+
+    // List available tools
+    const toolsResult = await client.listTools();
+    const tools = toolsResult.tools || [];
+
+    // Close the connection
+    await client.close();
+
+    // Store the MCP result in session
+    req.session.mcpResult = {
+      success: true,
+      requestedEndpoint: mcpEndpoint,
+      tools: tools.map(tool => ({
+        name: tool.name,
+        description: tool.description || null
+      })),
+      timestamp: new Date().toISOString()
+    };
+
+    await req.session.save();
+    res.redirect('/dashboard');
+
+  } catch (error) {
+    console.error('MCP Connect error:', error);
+    req.session.mcpResult = {
+      success: false,
+      error: error.message,
+      requestedEndpoint: req.body.mcpEndpoint,
+      timestamp: new Date().toISOString()
+    };
+    await req.session.save();
+    res.redirect('/dashboard');
+  }
+});
+
+// Clear MCP result route
+app.post('/clear-mcp', isAuthenticated, async (req, res) => {
+  delete req.session.mcpResult;
   await req.session.save();
   res.redirect('/dashboard');
 });
